@@ -1,0 +1,230 @@
+#include <Servo.h>
+//MOTOR PINS
+const byte frontBackDetach = 10 ;
+const byte leftRightDetach  = 12 ;
+const byte front = 2 ;
+const byte left = 4 ;
+const byte right = 6 ;
+const byte back = 8 ;
+
+//LED AND BUTTON PINS
+const byte interuptButton = 3 ;
+const byte middleButton = 5 ;
+const byte leftButton =  7 ;
+const byte redLed = 9 ;
+const byte greenLed = 11 ; 
+
+//VOLATILE DATA
+boolean newData = false;
+const int numChars = 500;
+char receivedChars[500];
+unsigned long int prevMilM = 0;
+unsigned long int prevMilL = 0;  
+unsigned long int prevMilD = 0;  
+const long interval = 500;  
+//CONST DATA
+const int frontUS [] = {200 , 1230 , 2250};
+const int backUS [] = {670 , 1380 , 2180};//680 2180
+const int leftUS [] = {580 , 1370, 2380};
+const int rightUS [] = {600, 1430 , 2500};
+
+
+const int FBDuS [] = {1000, 2500 };
+const int LRDuS [] = {1000, 2500 };
+
+//SERVO AND SERVO POSITION
+byte Fpos = 1 ;
+byte Rpos = 1 ;
+byte Bpos = 1 ;
+byte Lpos = 1 ;
+byte FBpos = 0 ;
+byte LRpos = 0 ;
+Servo FBD ;
+Servo LRD ;
+Servo F ;
+Servo B ;
+Servo R ;
+Servo L ;
+
+void recvWithEndMarker();
+void showNewData();
+
+
+void setup() {
+  Serial.begin(9600);
+  pinMode (interuptButton , INPUT_PULLUP) ;
+  pinMode (middleButton , INPUT_PULLUP);
+  pinMode (leftButton , INPUT_PULLUP);
+  
+  attachInterrupt(digitalPinToInterrupt(interuptButton), crash, FALLING);
+
+  pinMode(redLed , OUTPUT);
+  pinMode(greenLed , OUTPUT) ;
+
+  digitalWrite(redLed , HIGH) ;
+  
+  FBD.attach(frontBackDetach);
+  LRD.attach (leftRightDetach);
+  F.attach (front);
+  B.attach (back);
+  R.attach (right);
+  L.attach (left);
+  F.writeMicroseconds(frontUS[1]);
+  B.writeMicroseconds(backUS[1]);
+  R.writeMicroseconds(rightUS[1]);
+  L.writeMicroseconds(leftUS[1]);
+  LRD.writeMicroseconds(LRDuS[0]);
+  FBD.writeMicroseconds(FBDuS[0]);
+  delay (1000);
+}
+
+
+
+void crash(){
+ 
+ 
+  LRD.writeMicroseconds(LRDuS[0]);
+  FBD.writeMicroseconds(FBDuS[0]);
+  F.writeMicroseconds(frontUS[1]);
+  B.writeMicroseconds(backUS[1]);
+  R.writeMicroseconds(rightUS[1]);
+  L.writeMicroseconds(leftUS[1]);
+  memset(receivedChars,0,sizeof(receivedChars));
+    Fpos = 1 ;
+    Rpos = 1 ;
+    Bpos = 1 ;
+    Lpos = 1 ;
+    FBpos = 0 ;
+    LRpos = 0 ;
+newData = false ; 
+  }
+
+void loop() {
+  
+  recvWithEndMarker();
+  execNewMoves();
+  OC();
+
+}
+
+void OC(){
+  unsigned long currentMillis = millis();
+  
+   
+ if( digitalRead(middleButton) == LOW){
+  if (currentMillis - prevMilM >= interval) {
+   FBD.writeMicroseconds(FBDuS[FBpos  = !FBpos]);
+  prevMilM = currentMillis ;
+  }
+  }
+
+   if( digitalRead(leftButton) == LOW){
+     if (currentMillis - prevMilL >= interval) {
+   LRD.writeMicroseconds(LRDuS[LRpos  = !LRpos]);
+    prevMilL = currentMillis ;
+  }
+  }
+  
+   
+  }
+
+int toUpperCase(char c) {
+  return c - 32;
+}
+
+bool isLower (char c ) {
+  return c >= 'a' && c <= 'z';
+
+}
+
+void execNewMoves() {
+//Serial.print("FREE");
+  if (newData == true) {
+      digitalWrite(redLed , LOW);
+  digitalWrite(greenLed, HIGH);
+    int ctr = 0 ;
+
+    while (receivedChars[ctr] != '\0') {
+      if (receivedChars[ctr] == '.') {
+        Serial.println("PAUSE");
+       delay (740); 
+       // while (digitalRead(leftButton) == HIGH);
+        ctr ++;
+        continue ;
+      }
+      char temp = receivedChars[ctr];
+      bool t = isLower(temp) ;
+      if (t)
+      temp = toUpperCase(temp);
+      
+        Serial.println(temp);
+   
+      switch (temp) {
+      
+        case 'F':
+          t ? F.writeMicroseconds(frontUS[--Fpos]) : F.writeMicroseconds(frontUS[++Fpos]);
+          
+          break ;
+        case 'R':
+         
+          t ? R.writeMicroseconds(rightUS[--Rpos]) : R.writeMicroseconds(rightUS[++Rpos]);
+          break ;
+        case 'B':
+       
+          t ? B.writeMicroseconds(backUS[--Bpos]) : B.writeMicroseconds(backUS[++Bpos]);
+          break ;
+        case 'L':
+        
+          t ? L.writeMicroseconds(leftUS[--Lpos]) : L.writeMicroseconds(leftUS[++Lpos]);
+          break ;
+        case 'K':
+          FBD.writeMicroseconds(FBDuS[FBpos  = !FBpos]);
+          break ;
+        case 'S':
+          LRD.writeMicroseconds(LRDuS[LRpos  = !LRpos]);
+          break ;
+  
+      }
+
+
+
+      ctr++ ;
+    }
+    delay(250);
+    newData = false ;
+      digitalWrite(redLed , HIGH);
+  digitalWrite(greenLed,LOW );
+   
+  }
+}
+
+void recvWithEndMarker() {
+  static unsigned int ndx = 0;
+  char endMarker = '\n';
+  char rc;
+
+
+  while (Serial.available() > 0 && newData == false) {
+    digitalWrite(redLed , HIGH);
+  digitalWrite(greenLed,LOW );
+    rc = Serial.read();
+
+    if (rc != endMarker) {
+       digitalWrite(redLed , HIGH);
+  digitalWrite(greenLed,LOW );
+      receivedChars[ndx] = rc;
+      ndx++;
+      if (ndx >= numChars) {
+        ndx = numChars - 1;
+      }
+    }
+    else {
+      receivedChars[ndx] = '\0'; // terminate the string
+      ndx = 0;
+      newData = true;
+    }
+    digitalWrite(redLed , LOW);
+  digitalWrite(greenLed,HIGH);
+    
+  }
+}
